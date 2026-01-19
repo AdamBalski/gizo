@@ -11,10 +11,8 @@ from typing import Dict, List, Sequence, Tuple
 import numpy as np
 from PIL import Image
 
-from common import run_tasks
+from common import BLUE_DOM_PIX_THRESH, run_tasks
 from morphology import binary_close, binary_open, binary_erode
-
-_BLUE_DOM_PIX_THRESH = 0.08
 
 
 @dataclass(frozen=True)
@@ -99,7 +97,7 @@ def _extract_masks(region: np.ndarray) -> Dict[str, np.ndarray]:
     g = region[..., 1]
     b = region[..., 2]
 
-    blue_mask = (b > 0.42) & (b - (0.45 * r + 0.55 * g) > _BLUE_DOM_PIX_THRESH) & (b > g)
+    blue_mask = (b > 0.42) & (b - (0.45 * r + 0.55 * g) > BLUE_DOM_PIX_THRESH) & (b > g)
     nucleus_mask = (b > 0.5) & ((b - r) > 0.15) & ((b - g) > 0.15)
     eos_pink_mask = (r > 0.64) & (g > 0.48) & (b < 0.78)
     pale_pink_mask = (r > 0.52) & (g > 0.45) & (b < 0.84) & ((r - g) < 0.12)
@@ -169,7 +167,7 @@ FEATURE_NAMES: Sequence[str] = (
 )
 
 
-def _extract_feature_vector(
+def extract_feature_vector(
     region: np.ndarray,
     bbox: Tuple[int, int, int, int],
     image_shape: Tuple[int, int],
@@ -199,13 +197,10 @@ def _extract_feature_vector(
     mean_rgb = flat.mean(axis=0)
     std_rgb = flat.std(axis=0)
     blue_dom = b - 0.5 * (r + g)
-    warmth = 0.5 * (r + g) - b
     mean_blue_dom = float(blue_dom.mean())
-    mean_warmth = float(warmth.mean())
     max_rgb = region.max(axis=2)
     min_rgb = region.min(axis=2)
     mean_saturation = float((max_rgb - min_rgb).mean())
-    mean_value = float(max_rgb.mean())
 
     metrics = {}
     for key in ("nucleus", "pale", "blue"):
@@ -213,7 +208,6 @@ def _extract_feature_vector(
         metrics[key] = (float(comps), float(holes), float(euler))
 
     perimeter = _perimeter(masks["cell"])
-    perimeter_ratio = perimeter / max(1.0, 2.0 * (h + w))
     compactness = (perimeter ** 2) / max(1.0, masks["cell"].sum())
     moment_ratio, moment_spread = _moment_features(masks["cell"])
 
@@ -307,7 +301,7 @@ def _process_task(task: FeatureTask) -> List[dict]:
     for bbox in task.boxes:
         x0, y0, x1, y1 = _clamp_bbox(bbox, image_shape)
         region = arr[y0 : y1 + 1, x0 : x1 + 1]
-        features = _extract_feature_vector(region, (x0, y0, x1, y1), image_shape)
+        features = extract_feature_vector(region, (x0, y0, x1, y1), image_shape)
         entries.append(
             {
                 "image": task.image_value,
@@ -337,7 +331,7 @@ def main() -> None:
 
     if not bounding_boxes.exists():
         raise FileNotFoundError(
-            f"Bounding box manifest {bounding_boxes} not found. Run bounding-boxes-creation.py first."
+            f"Bounding box manifest {bounding_boxes} not found. Run bounding_boxes_creation.py first."
         )
 
     payload = json.loads(bounding_boxes.read_text())

@@ -14,8 +14,8 @@
 - `download` – fetch and unzip the dataset (requires Kaggle credentials).
 - `clean-data` – remove the downloaded dataset.
 - `clean` – remove all artifacts under `target/`.
-- `create-bounding-boxes` – run `bounding-boxes-creation.py` to produce `target/bounding-boxes.json` from TRAIN images.
-- `extract-features` – run `feature-extraction.py` to produce `target/features.json`.
+- `create-bounding-boxes` – run `bounding_boxes_creation.py` to produce `target/bounding-boxes.json` from TRAIN images.
+- `extract-features` – run `feature_extraction.py` to produce `target/features.json`.
 - `eval` – train/evaluate the decision tree and write `target/eval-results.json`.
 - `summary` – render `target/eval-summary.png` from the evaluation report.
 - `render-decision-tree` – render `target/decision-tree.png` from the trained tree.

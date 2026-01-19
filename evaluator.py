@@ -8,18 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence
 
-_VALID_SUFFIXES = {".jpg", ".jpeg", ".png"}
-
-from common import run_tasks
-from decision_tree_annotator import (
-    DecisionTreeClassifier,
-    _component_stats,
-    _extract_feature_vector,
-    _initial_mask,
-    _is_white_cell,
-    _load_image,
-    _load_training_data,
-)
+from common import VALID_SUFFIXES, component_stats, initial_mask, is_white_cell, load_image, run_tasks
+from decision_tree_annotator import DecisionTreeClassifier, _load_training_data
+from feature_extraction import extract_feature_vector
 
 
 @dataclass(frozen=True)
@@ -39,7 +30,7 @@ def _iter_eval_tasks(test_root: Path, data_root: Path) -> List[EvalTask]:
         for path in sorted(label_dir.rglob("*")):
             if not path.is_file():
                 continue
-            if path.suffix.lower() not in _VALID_SUFFIXES:
+            if path.suffix.lower() not in VALID_SUFFIXES:
                 continue
             try:
                 rel_path = path.resolve().relative_to(data_root)
@@ -54,18 +45,18 @@ def _run_detector(
     task: EvalTask,
     tree: DecisionTreeClassifier,
 ) -> Dict[str, object]:
-    _image, arr = _load_image(Path(task.path))
-    mask = _initial_mask(arr)
-    comps = _component_stats(mask, arr)
+    _image, arr = load_image(Path(task.path))
+    mask = initial_mask(arr)
+    comps = component_stats(mask)
     image_shape = (arr.shape[0], arr.shape[1])
     image_area = image_shape[0] * image_shape[1]
     predictions: List[str] = []
     for comp in comps:
-        if not _is_white_cell(comp, image_area):
+        if not is_white_cell(comp, image_area):
             continue
         x0, y0, x1, y1 = comp.bbox
         region = arr[y0 : y1 + 1, x0 : x1 + 1]
-        features = _extract_feature_vector(region, comp.bbox, image_shape)
+        features = extract_feature_vector(region, comp.bbox, image_shape)
         pred = tree.predict(features).upper()
         predictions.append(pred)
     matched = task.label in predictions

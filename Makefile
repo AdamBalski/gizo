@@ -29,12 +29,12 @@ clean:
 	rm -rf $(TARGET_DIR)
 
 $(BBOX_JSON):
-	python3 bounding-boxes-creation.py
+	python3 bounding_boxes_creation.py
 
 create-bounding-boxes: $(BBOX_JSON)
 
 $(FEATURES_JSON): $(BBOX_JSON)
-	python3 feature-extraction.py
+	python3 feature_extraction.py
 
 extract-features: $(FEATURES_JSON)
 
