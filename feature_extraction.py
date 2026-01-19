@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
-from PIL import Image
 
-from common import BLUE_DOM_PIX_THRESH, run_tasks
+from common import BLUE_DOM_PIX_THRESH, load_image, run_tasks
 from morphology import binary_close, binary_open, binary_erode
 
 
@@ -23,63 +22,42 @@ class FeatureTask:
     path: str
 
 
-def _load_image(path: Path) -> np.ndarray:
-    img = Image.open(path).convert("RGB")
-    return np.asarray(img, dtype=np.float32) / 255.0
+_NEIGH = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
-def _count_components(mask: np.ndarray) -> int:
+def _flood_fill(mask: np.ndarray, visited: np.ndarray, start_y: int, start_x: int) -> bool:
+    h, w = mask.shape
+    touches_border = start_y in (0, h - 1) or start_x in (0, w - 1)
+    stack = [(start_y, start_x)]
+    visited[start_y, start_x] = True
+    while stack:
+        cy, cx = stack.pop()
+        for dy, dx in _NEIGH:
+            ny, nx = cy + dy, cx + dx
+            if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not visited[ny, nx]:
+                visited[ny, nx] = True
+                stack.append((ny, nx))
+                if ny in (0, h - 1) or nx in (0, w - 1):
+                    touches_border = True
+    return touches_border
+
+
+def _count_regions(mask: np.ndarray, count_interior_only: bool = False) -> int:
     h, w = mask.shape
     visited = np.zeros_like(mask, dtype=bool)
-    comps = 0
-    neigh = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    count = 0
     for y in range(h):
         for x in range(w):
             if mask[y, x] and not visited[y, x]:
-                comps += 1
-                stack = [(y, x)]
-                visited[y, x] = True
-                while stack:
-                    cy, cx = stack.pop()
-                    for dy, dx in neigh:
-                        ny, nx = cy + dy, cx + dx
-                        if 0 <= ny < h and 0 <= nx < w:
-                            if mask[ny, nx] and not visited[ny, nx]:
-                                visited[ny, nx] = True
-                                stack.append((ny, nx))
-    return comps
-
-
-def _count_holes(mask: np.ndarray) -> int:
-    h, w = mask.shape
-    visited = np.zeros_like(mask, dtype=bool)
-    holes = 0
-    neigh = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-    inv = ~mask
-    for y in range(h):
-        for x in range(w):
-            if inv[y, x] and not visited[y, x]:
-                touches_border = y in (0, h - 1) or x in (0, w - 1)
-                stack = [(y, x)]
-                visited[y, x] = True
-                while stack:
-                    cy, cx = stack.pop()
-                    for dy, dx in neigh:
-                        ny, nx = cy + dy, cx + dx
-                        if 0 <= ny < h and 0 <= nx < w:
-                            if inv[ny, nx] and not visited[ny, nx]:
-                                visited[ny, nx] = True
-                                stack.append((ny, nx))
-                                if ny in (0, h - 1) or nx in (0, w - 1):
-                                    touches_border = True
-                if not touches_border:
-                    holes += 1
-    return holes
+                touches_border = _flood_fill(mask, visited, y, x)
+                if not count_interior_only or not touches_border:
+                    count += 1
+    return count
 
 
 def _component_metrics(mask: np.ndarray) -> Tuple[int, int, int]:
-    comps = _count_components(mask)
-    holes = _count_holes(mask)
+    comps = _count_regions(mask)
+    holes = _count_regions(~mask, count_interior_only=True)
     return comps, holes, comps - holes
 
 
@@ -172,7 +150,6 @@ def extract_feature_vector(
     bbox: Tuple[int, int, int, int],
     image_shape: Tuple[int, int],
 ) -> List[float]:
-    h, w = region.shape[:2]
     bbox_w = bbox[2] - bbox[0] + 1
     bbox_h = bbox[3] - bbox[1] + 1
     image_h, image_w = image_shape
@@ -295,7 +272,7 @@ def _build_tasks(items: List[dict], repo_root: Path) -> List[FeatureTask]:
 
 def _process_task(task: FeatureTask) -> List[dict]:
     path = Path(task.path)
-    arr = _load_image(path)
+    _, arr = load_image(path)
     image_shape = (arr.shape[0], arr.shape[1])
     entries: List[dict] = []
     for bbox in task.boxes:
