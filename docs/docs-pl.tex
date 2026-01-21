@@ -1,0 +1,799 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% Page geometry
+\geometry{margin=1in}
+
+% Code listing style
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{codegreen}{RGB}{0,128,0}
+\definecolor{codegray}{RGB}{128,128,128}
+\definecolor{codepurple}{RGB}{128,0,128}
+
+\lstdefinestyle{bashstyle}{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    xleftmargin=0.5cm,
+    framexleftmargin=0.5cm
+}
+
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    xleftmargin=0.5cm,
+    framexleftmargin=0.5cm,
+    keywordstyle=\color{codepurple},
+    commentstyle=\color{codegreen},
+    stringstyle=\color{codegray},
+    language=Python
+}
+
+\lstdefinestyle{jsonstyle}{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    xleftmargin=0.5cm,
+    framexleftmargin=0.5cm
+}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={GIZO - Klasyfikacja białych krwinek},
+    pdfauthor={Projekt GIZO},
+}
+
+% Title
+\title{GIZO: Detekcja, klasyfikacja i adnotacja białych krwinek\\[0.5em]\large Dokumentacja użytkownika i raport techniczny}
+\author{Projekt GIZO}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+GIZO to pipeline przetwarzania obrazów do wykrywania i klasyfikacji białych krwinek w obrazach mikroskopowych. System wykorzystuje segmentację opartą na kolorach do wykrywania regionów komórek oraz własną implementację klasyfikatora drzewa decyzyjnego ID3 wytrenowanego na 27-wymiarowych wektorach cech, aby klasyfikować komórki do czterech kategorii: limfocyty, eozynofile, neutrofile i monocyty. Niniejszy dokument zawiera dokumentację użytkownika dla systemu budowania i narzędzi adnotacji, a następnie raport techniczny opisujący podejście, algorytm i ewaluację wydajności.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%===============================================================================
+% CZĘŚĆ I: DOKUMENTACJA UŻYTKOWNIKA
+%===============================================================================
+\part{Dokumentacja użytkownika}
+
+\section{Przegląd}
+
+GIZO to całościowe narzędzie do analizy białych krwinek:
+\begin{enumerate}
+    \item \textbf{Pozyskiwanie danych} -- Pobieranie i przygotowanie zbioru danych Blood Cells z Kaggle
+    \item \textbf{Detekcja} -- Lokalizacja białych krwinek przy użyciu segmentacji opartej na kolorach
+    \item \textbf{Ekstrakcja cech} -- Obliczanie 27-wymiarowych wektorów cech dla każdej komórki
+    \item \textbf{Klasyfikacja} -- Trenowanie i stosowanie klasyfikatora drzewa decyzyjnego ID3
+    \item \textbf{Ewaluacja} -- Pomiar dokładności i generowanie wizualizacji wydajności
+    \item \textbf{Adnotacja} -- Tworzenie obrazów z ramkami ograniczającymi i etykietami
+\end{enumerate}
+
+\section{Wymagania wstępne}
+
+\subsection{Środowisko Python}
+Projekt wymaga Pythona 3.10+ z następującymi zależnościami:
+\begin{lstlisting}[style=bashstyle]
+numpy>=2.0
+pillow>=12.0
+matplotlib>=3.10
+\end{lstlisting}
+
+Środowisko wirtualne jest automatycznie tworzone i zarządzane przez Makefile. Nie jest wymagana ręczna aktywacja - wszystkie cele Pythona automatycznie używają środowiska wirtualnego z katalogu \texttt{venv/}.
+
+Jeśli chcesz ręcznie aktywować środowisko (np. do interaktywnej pracy):
+\begin{lstlisting}[style=bashstyle]
+source venv/bin/activate
+\end{lstlisting}
+
+\subsection{Zbiór danych}
+System wykorzystuje zbiór danych Blood Cells z Kaggle. Do automatycznego pobrania potrzebne są skonfigurowane dane uwierzytelniające API Kaggle.
+
+\section{Cele Make}
+
+Projekt wykorzystuje GNU Make do automatyzacji budowania. Wszystkie cele są zdefiniowane w pliku \texttt{Makefile}. Poniżej znajduje się kompletna lista dostępnych celów:
+
+\subsection{Przegląd wszystkich celów}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Cel} & \textbf{Opis} \\
+\midrule
+\texttt{make venv} & Tworzy środowisko wirtualne i instaluje zależności \\
+\texttt{make download} & Pobiera i rozpakowuje zbiór danych \\
+\texttt{make data-trim} & Zmniejsza rozmiar zbioru danych (dla rozwoju) \\
+\texttt{make create-bounding-boxes} & Wykrywa komórki w obrazach TRAIN \\
+\texttt{make extract-features} & Ekstrahuje cechy z wykrytych komórek \\
+\texttt{make eval} & Trenuje drzewo decyzyjne i ewaluuje na TEST \\
+\texttt{make summary} & Generuje wykresy wydajności \\
+\texttt{make render-decision-tree} & Wizualizuje strukturę drzewa \\
+\texttt{make clean} & Usuwa wygenerowane artefakty \\
+\texttt{make clean-data} & Usuwa pobrane dane \\
+\texttt{make clean-venv} & Usuwa środowisko wirtualne \\
+\texttt{make clean-all} & Czyści wszystko (dane, artefakty, venv) \\
+\bottomrule
+\end{tabular}
+\caption{Kompletna lista celów Makefile}
+\end{table}
+
+\subsection{Cele zarządzania środowiskiem}
+
+\subsubsection{\texttt{make venv}}
+Tworzy środowisko wirtualne i instaluje wszystkie zależności z \texttt{requirements.txt}.
+
+\begin{lstlisting}[style=bashstyle]
+$ make venv
+Creating virtual environment...
+Installing dependencies...
+Virtual environment ready!
+Virtual environment is ready at venv
+Activate with: source venv/bin/activate
+\end{lstlisting}
+
+\textbf{Wyjście:} Środowisko wirtualne w katalogu \texttt{venv/} z zainstalowanymi pakietami.
+
+\subsubsection{\texttt{make clean-venv}}
+Usuwa środowisko wirtualne.
+
+\begin{lstlisting}[style=bashstyle]
+$ make clean-venv
+rm -rf venv
+Removed virtual environment
+\end{lstlisting}
+
+\subsubsection{\texttt{make clean-all}}
+Czyści wszystkie artefakty, dane i środowisko wirtualne.
+
+\begin{lstlisting}[style=bashstyle]
+$ make clean-all
+rm -rf target
+rm -rf data
+rm -rf venv
+\end{lstlisting}
+
+\subsection{Cele zarządzania danymi}
+
+\subsubsection{\texttt{make download}}
+Pobiera i rozpakowuje zbiór danych Blood Cells z Kaggle.
+
+\begin{lstlisting}[style=bashstyle]
+$ make download
+curl -L -o data/blood-cells.zip https://www.kaggle.com/...
+unzip -q -o data/blood-cells.zip -d data
+\end{lstlisting}
+
+\textbf{Wyjście:} Rozpakowuje zbiór danych do \texttt{data}.
+
+\subsubsection{\texttt{make data-trim}}
+Zmniejsza rozmiar zbioru danych, zachowując tylko 10 najnowszych plików w każdym katalogu. Przydatne do szybszych iteracji podczas rozwoju.
+
+\begin{lstlisting}[style=bashstyle]
+$ make data-trim
+\end{lstlisting}
+
+\subsubsection{\texttt{make clean-data}}
+Usuwa wszystkie pobrane dane.
+
+\begin{lstlisting}[style=bashstyle]
+$ make clean-data
+rm -rf data
+\end{lstlisting}
+
+\subsubsection{\texttt{make clean}}
+Usuwa wszystkie wygenerowane artefakty w katalogu \texttt{target/}.
+
+\begin{lstlisting}[style=bashstyle]
+$ make clean
+rm -rf target
+\end{lstlisting}
+
+\subsection{Cele przetwarzania}
+
+\subsubsection{\texttt{make create-bounding-boxes}}
+Uruchamia \texttt{bounding\_boxes\_creation.py} w celu wykrycia białych krwinek w obrazach TRAIN i zapisania współrzędnych ich ramek ograniczających.
+
+\begin{lstlisting}[style=bashstyle]
+$ make create-bounding-boxes
+python3 bounding_boxes_creation.py
+Processing 9957 images with 12 worker(s)...
+...
+9957/9957
+\end{lstlisting}
+
+\textbf{Wyjście:} \texttt{target/bounding-boxes.json}
+
+\textbf{Przykładowe wyjście (skrócone):}
+\begin{lstlisting}[style=jsonstyle]
+{
+  "images_root": "data/dataset2-master/dataset2-master/images",
+  "splits": ["TRAIN"],
+  "interrupted": false,
+  "missing_boxes": 0,
+  "items": [
+    {
+      "image": "data/.../TRAIN/EOSINOPHIL/_6_1230.jpeg",
+      "label": "EOSINOPHIL",
+      "boxes": [[151, 88, 214, 146]]
+    },
+    ...
+  ]
+}
+\end{lstlisting}
+
+\subsubsection{\texttt{make extract-features}}
+Uruchamia \texttt{feature\_extraction.py} w celu obliczenia 27-wymiarowych wektorów cech dla każdej wykrytej komórki.
+
+\begin{lstlisting}[style=bashstyle]
+$ make extract-features
+python3 feature_extraction.py
+Processing 9944 images with 12 worker(s)...
+...
+9944/9944
+\end{lstlisting}
+
+\textbf{Wyjście:} \texttt{target/features.json}
+
+\textbf{Przykładowe wyjście (skrócone):}
+\begin{lstlisting}[style=jsonstyle]
+{
+  "features": [
+    "bbox_width_ratio", "bbox_height_ratio", "bbox_aspect_ratio",
+    "bbox_area_ratio", "blue_fraction", "nucleus_fraction",
+    "eosin_fraction", "pale_fraction", "monocyte_fraction",
+    "cell_fraction", "mean_red", "mean_green", "mean_blue",
+    "std_red", "std_green", "std_blue", "mean_blue_dom",
+    "mean_saturation", "purple_fraction", "nucleus_components",
+    "nucleus_holes", "pale_components", "pale_euler",
+    "blue_holes", "compactness", "moment_ratio", "moment_spread"
+  ],
+  "items": [
+    {
+      "image": "data/.../TRAIN/EOSINOPHIL/_6_1230.jpeg",
+      "label": "EOSINOPHIL",
+      "bbox": [151, 88, 214, 146],
+      "features": [0.2, 0.246, 1.085, 0.049, 0.634, ...]
+    }
+  ]
+}
+\end{lstlisting}
+
+\subsubsection{\texttt{make eval}}
+Uruchamia \texttt{evaluator.py} w celu wytrenowania drzewa decyzyjnego i ewaluacji na obrazach TEST.
+
+\begin{lstlisting}[style=bashstyle]
+$ make eval
+python3 evaluator.py
+Evaluating 2487 TEST images with 12 worker(s)...
+...
+2487/2487
+\end{lstlisting}
+
+\textbf{Wyjście:} \texttt{target/eval-results.json}
+
+\textbf{Przykładowe wyjście (skrócone):}
+\begin{lstlisting}[style=jsonstyle]
+{
+  "test_root": "data/dataset2-master/.../TEST",
+  "total": 2487,
+  "processed": 2487,
+  "correct": 1958,
+  "accuracy": 0.787,
+  "interrupted": false,
+  "items": [
+    {
+      "image": ".../TEST/LYMPHOCYTE/_2_3048.jpeg",
+      "expected": "LYMPHOCYTE",
+      "predictions": ["LYMPHOCYTE"],
+      "matched": true
+    },
+    ...
+  ]
+}
+\end{lstlisting}
+
+\subsubsection{\texttt{make summary}}
+Uruchamia \texttt{plotter.py} w celu wygenerowania wizualizacji ewaluacji.
+
+\begin{lstlisting}[style=bashstyle]
+$ make summary
+python3 plotter.py
+Wrote summary plot to target/eval-summary.png (overall accuracy 78.73%)
+\end{lstlisting}
+
+\textbf{Wyjście:} \texttt{target/eval-summary.png} -- 4-panelowy rysunek z wykresami dokładności, precyzji, macierzą pomyłek i statystykami podsumowującymi.
+
+\subsubsection{\texttt{make render-decision-tree}}
+Uruchamia \texttt{tree\_plotter.py} w celu wizualizacji struktury wytrenowanego drzewa decyzyjnego.
+
+\begin{lstlisting}[style=bashstyle]
+$ make render-decision-tree
+python3 tree_plotter.py
+Wrote decision tree diagram to target/decision-tree.png
+\end{lstlisting}
+
+\textbf{Wyjście:} \texttt{target/decision-tree.png}
+
+\section{Adnotator drzewa decyzyjnego}
+
+Skrypt \texttt{decision\_tree\_annotator.py} jest głównym narzędziem użytkownika do adnotowania nowych obrazów klasyfikacjami białych krwinek.
+
+\subsection{Jak to działa}
+
+Adnotator wykonuje następujące kroki:
+
+\begin{enumerate}
+    \item \textbf{Wczytanie danych treningowych:} Odczytuje \texttt{target/features.json} w celu uzyskania wektorów cech i etykiet z obrazów TRAIN.
+    
+    \item \textbf{Trenowanie klasyfikatora:} Buduje drzewo decyzyjne ID3 z parametrami:
+    \begin{itemize}
+        \item Maksymalna głębokość: 8
+        \item Minimalna liczba próbek w liściu: 5
+        \item Minimalny zysk informacyjny: 0.001
+        \item Próg czystości: 0.9 (wczesne zatrzymanie)
+    \end{itemize}
+    
+    \item \textbf{Przetwarzanie obrazów TEST:} Dla każdego obrazu w \texttt{data/.../TEST/}:
+    \begin{itemize}
+        \item Zastosowanie segmentacji opartej na kolorach do wykrycia regionów komórek
+        \item Ekstrakcja wektora cech dla każdej wykrytej komórki
+        \item Klasyfikacja przy użyciu wytrenowanego drzewa
+        \item Rysowanie ramek ograniczających i etykiet na obrazie
+    \end{itemize}
+    
+    \item \textbf{Zapis adnotowanych obrazów:} Wyjście odzwierciedlone w \texttt{target/} z zachowaniem struktury katalogów.
+\end{enumerate}
+
+
+\subsection{Użycie}
+
+Skrypt \texttt{decision\_tree\_annotator.py} obsługuje dwa tryby pracy:
+
+\subsubsection{Tryb wsadowy (domyślny)}
+Przetwarza wszystkie obrazy w katalogu \texttt{data/.../TEST/}:
+
+\begin{lstlisting}[style=bashstyle]
+$ make venv # create a virtual environment if it does not exist
+$ venv/bin/python decision_tree_annotator.py
+\end{lstlisting}
+
+Alternatywnie, jeśli środowisko jest już aktywne:
+\begin{lstlisting}[style=bashstyle]
+$ source venv/bin/activate
+$ python3 decision_tree_annotator.py
+\end{lstlisting}
+
+\subsubsection{Tryb pojedynczego pliku}
+Przetwarza jeden obraz wejściowy i zapisuje wynik do określonego pliku wyjściowego:
+
+\begin{lstlisting}[style=bashstyle]
+$ venv/bin/python decision_tree_annotator.py <plik_wejsciowy> <plik_wyjsciowy>
+\end{lstlisting}
+
+Przykład:
+\begin{lstlisting}[style=bashstyle]
+$ venv/bin/python decision_tree_annotator.py input.jpg output_annotated.jpg
+\end{lstlisting}
+
+\subsubsection{Pomoc}
+Wyświetla informacje o użyciu:
+\begin{lstlisting}[style=bashstyle]
+$ venv/bin/python decision_tree_annotator.py --help
+Usage:
+  python decision_tree_annotator.py                    # Process all TEST images
+  python decision_tree_annotator.py <input> <output>  # Process single image
+  python decision_tree_annotator.py --help             # Show this help
+\end{lstlisting}
+
+\subsubsection{Wymagania}
+Przed uruchomieniem skryptu upewnij się, że:
+\begin{enumerate}
+    \item Cechy są wyekstrahowane (\texttt{make extract-features})
+\end{enumerate}
+
+\subsection{Przykładowe wyjście}
+
+\begin{lstlisting}[style=bashstyle]
+Annotated target/.../TEST/EOSINOPHIL/_7_5399.jpeg :: EOSINOPHIL:1
+Annotated target/.../TEST/LYMPHOCYTE/_2_3048.jpeg :: LYMPHOCYTE:1
+Annotated target/.../TEST/MONOCYTE/_0_1381.jpeg :: MONOCYTE:1
+Annotated target/.../TEST/NEUTROPHIL/_0_208.jpeg :: NEUTROPHIL:1
+\end{lstlisting}
+
+Każda linia pokazuje ścieżkę wyjściową i podsumowanie wykrytych komórek (np. \texttt{LYMPHOCYTE:1} oznacza wykrycie jednego limfocytu).
+
+\subsection{Kolory etykiet}
+
+Adnotator używa innych kolorów dla każdego typu komórki:
+\begin{itemize}
+    \item \textbf{LYMPHOCYTE} -- Limonkowy
+    \item \textbf{EOSINOPHIL} -- Pomarańczowy
+    \item \textbf{NEUTROPHIL} -- Cyjan
+    \item \textbf{MONOCYTE} -- Magenta
+\end{itemize}
+
+\section{Przykładowe artefakty}
+
+\subsection{Podsumowanie ewaluacji}
+
+Rysunek~\ref{fig:eval-summary} przedstawia wizualizację wyników ewaluacji wygenerowaną przez \texttt{make summary}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/eval-summary.png}
+    \caption{Podsumowanie ewaluacji pokazujące dokładność per klasa, precyzję, macierz pomyłek i ogólne statystyki.}
+    \label{fig:eval-summary}
+\end{figure}
+
+\subsection{Wizualizacja drzewa decyzyjnego}
+
+Rysunek~\ref{fig:decision-tree} przedstawia strukturę wytrenowanego drzewa decyzyjnego.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/decision-tree.png}
+    \caption{Wizualizacja wytrenowanego drzewa decyzyjnego ID3. Węzły wewnętrzne pokazują nazwy cech i progi; węzły liści pokazują przewidywane etykiety klas.}
+    \label{fig:decision-tree}
+\end{figure}
+
+\subsection{Przykłady adnotowanych obrazów}
+
+Rysunek~\ref{fig:annotated} przedstawia przykłady adnotowanych obrazów TEST dla każdego typu komórki.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/annotated-lymphocyte.jpeg}
+        \caption{Limfocyt (poprawnie sklasyfikowany)}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/annotated-eosinophil.jpeg}
+        \caption{Eozinofil (poprawnie sklasyfikowany)}
+    \end{subfigure}
+    
+    \vspace{0.5cm}
+    
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/annotated-monocyte.jpeg}
+        \caption{Monocyt (poprawnie sklasyfikowany)}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/annotated-neutrophil.jpeg}
+        \caption{Neutrofil (poprawnie sklasyfikowany)}
+    \end{subfigure}
+    \caption{Przykładowe adnotowane obrazy pokazujące wykryte białe krwinki z ramkami ograniczającymi i etykietami klas.}
+    \label{fig:annotated}
+\end{figure}
+
+\newpage
+
+%===============================================================================
+% CZĘŚĆ II: RAPORT TECHNICZNY
+%===============================================================================
+\part{Raport techniczny}
+
+\section{Wprowadzenie}
+
+Niniejszy projekt bada zautomatyzowane podejście do klasyfikacji białych krwinek wykorzystujące klasyczne techniki widzenia komputerowego i klasyfikację drzewem decyzyjnym.
+
+\subsection{Sformułowanie problemu}
+
+Mając obrazy mikroskopowe rozmazów krwi, system musi:
+\begin{enumerate}
+    \item Wykryć regiony zawierające białe krwinki
+    \item Sklasyfikować każdą wykrytą komórkę do jednego z czterech typów:
+    \begin{itemize}
+        \item \textbf{Limfocyt} -- Małe komórki z dużym, ciemnym jądrem
+        \item \textbf{Eozinofil} -- Komórki z dwupłatowym jądrem i różowo-pomarańczowymi ziarnistościami
+        \item \textbf{Neutrofil} -- Komórki z wielopłatowym jądrem
+        \item \textbf{Monocyt} -- Duże komórki z nerkowatym jądrem
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Zbiór danych}
+
+Wykorzystujemy zbiór danych Blood Cells z Kaggle zawierający obrazy mikroskopowe zorganizowane według typu komórki:
+\begin{itemize}
+    \item \textbf{Podział TRAIN:} Używany do ekstrakcji cech i trenowania klasyfikatora
+    \item \textbf{Podział TEST:} Używany do ewaluacji
+\end{itemize}
+
+Wykorzystaliśmy pełny zbiór danych zawierający około 9944 obrazów TRAIN i 2487 obrazów TEST.
+
+\section{Podejście}
+
+Nasz pipeline składa się z czterech głównych etapów: detekcji, ekstrakcji cech, klasyfikacji i adnotacji.
+
+\subsection{Detekcja komórek}
+
+Białe krwinki są wykrywane przy użyciu segmentacji opartej na kolorach w przestrzeni RGB:
+
+\begin{equation}
+\text{maska}(x,y) = \begin{cases}
+1 & \text{jeśli } B > 0.42 \text{ i } B - (0.45R + 0.55G) > 0.08 \text{ i } B > G \\
+0 & \text{w przeciwnym razie}
+\end{cases}
+\end{equation}
+
+gdzie $R$, $G$, $B$ są znormalizowanymi kanałami kolorów w $[0,1]$.
+
+Ta maska celuje w regiony z dominującym niebieskim charakterystyczne dla jąder komórkowych barwionych powszechnymi barwnikami hematologicznymi (np. Wright-Giemsa). Maska jest udoskonalana przy użyciu zamknięcia morfologicznego w celu wypełnienia małych przerw.
+
+Analiza spójnych składowych następnie wyodrębnia poszczególne regiony komórek. Składowe są filtrowane według:
+\begin{itemize}
+    \item \textbf{Minimalne pole:} $\max(600, 0.003 \times \text{pole\_obrazu})$ pikseli
+    \item \textbf{Minimalna zwartość:} 0.42 (stosunek pikseli do pola ramki ograniczającej)
+\end{itemize}
+
+\subsection{Ekstrakcja cech}
+
+Dla każdego wykrytego regionu komórki obliczamy 27-wymiarowy wektor cech:
+
+\subsubsection{Cechy geometryczne (4)}
+\begin{itemize}
+    \item \texttt{bbox\_width\_ratio}: Szerokość ramki / szerokość obrazu
+    \item \texttt{bbox\_height\_ratio}: Wysokość ramki / wysokość obrazu
+    \item \texttt{bbox\_aspect\_ratio}: Szerokość / wysokość ramki ograniczającej
+    \item \texttt{bbox\_area\_ratio}: Pole ramki / pole obrazu
+\end{itemize}
+
+\subsubsection{Frakcje masek kolorów (7)}
+Obliczanych jest kilka masek kolorów w celu identyfikacji różnych struktur komórkowych:
+
+\begin{itemize}
+    \item \texttt{blue\_fraction}: Proporcja pikseli z dominującym niebieskim (ogólna detekcja komórek)
+    \item \texttt{nucleus\_fraction}: Proporcja ciemnoniebieskich pikseli ($B > 0.5$, $B-R > 0.15$, $B-G > 0.15$)
+    \item \texttt{eosin\_fraction}: Proporcja różowo-pomarańczowych pikseli (ziarnistości eozynofili)
+    \item \texttt{pale\_fraction}: Proporcja bladoróżowych pikseli (cytoplazma)
+    \item \texttt{monocyte\_fraction}: Proporcja szarawych pikseli (cytoplazma monocytów)
+    \item \texttt{cell\_fraction}: Unia wszystkich masek związanych z komórką
+    \item \texttt{purple\_fraction}: Proporcja fioletowych pikseli
+\end{itemize}
+
+\subsubsection{Statystyki kolorów (8)}
+\begin{itemize}
+    \item \texttt{mean\_red}, \texttt{mean\_green}, \texttt{mean\_blue}: Średnie wartości RGB
+    \item \texttt{std\_red}, \texttt{std\_green}, \texttt{std\_blue}: Odchylenia standardowe RGB
+    \item \texttt{mean\_blue\_dom}: Średnia z $B - 0.5(R+G)$ (dominacja niebieskiego)
+    \item \texttt{mean\_saturation}: Średnia z $\max(R,G,B) - \min(R,G,B)$
+\end{itemize}
+
+\subsubsection{Cechy morfologiczne (8)}
+\begin{itemize}
+    \item \texttt{nucleus\_components}: Liczba spójnych składowych w masce jądra
+    \item \texttt{nucleus\_holes}: Liczba dziur w masce jądra
+    \item \texttt{pale\_components}: Liczba składowych bladego regionu
+    \item \texttt{pale\_euler}: Liczba Eulera maski bladej (składowe - dziury)
+    \item \texttt{blue\_holes}: Liczba dziur w masce niebieskiej
+    \item \texttt{compactness}: $\text{obwód}^2 / \text{pole}$ (miara okrągłości)
+    \item \texttt{moment\_ratio}: Stosunek wartości własnych macierzy kowariancji (wydłużenie)
+    \item \texttt{moment\_spread}: Suma wartości własnych (rozproszenie)
+\end{itemize}
+
+\subsection{Algorytm klasyfikacji}
+
+Implementujemy własne drzewo decyzyjne ID3 (Iterative Dichotomiser 3) o następujących cechach:
+
+\subsubsection{Konstrukcja drzewa}
+
+Drzewo jest budowane rekurencyjnie przy użyciu zysku informacyjnego jako kryterium podziału:
+
+\begin{equation}
+\text{Zysk}(S, A) = H(S) - \sum_{v \in \text{Wartości}(A)} \frac{|S_v|}{|S|} H(S_v)
+\end{equation}
+
+gdzie $H(S)$ jest entropią zbioru $S$:
+
+\begin{equation}
+H(S) = -\sum_{c \in \text{Klasy}} p_c \log_2(p_c)
+\end{equation}
+
+\subsubsection{Kryteria zatrzymania}
+
+Węzeł staje się liściem (przewidującym klasę większościową) gdy:
+\begin{itemize}
+    \item Wszystkie próbki mają tę samą etykietę (czysty węzeł)
+    \item Osiągnięto maksymalną głębokość (8)
+    \item Węzeł ma $\leq 5$ próbek
+    \item Najlepszy podział ma zysk informacyjny $< 0.001$
+    \item Czystość węzła $\geq 0.9$ (90\% tej samej klasy)
+\end{itemize}
+
+\subsubsection{Hiperparametry}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Parametr} & \textbf{Wartość} & \textbf{Cel} \\
+\midrule
+\texttt{max\_depth} & 8 & Zapobieganie przeuczeniu \\
+\texttt{min\_leaf} & 5 & Minimalna liczba próbek w liściu \\
+\texttt{min\_gain} & 0.001 & Minimalny zysk informacyjny \\
+\texttt{purity\_threshold} & 0.9 & Próg wczesnego zatrzymania \\
+\bottomrule
+\end{tabular}
+\caption{Hiperparametry drzewa decyzyjnego}
+\end{table}
+
+\section{Wyniki}
+
+\subsection{Ogólna wydajność}
+
+Na pełnym zbiorze testowym (2487 obrazów):
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Metryka} & \textbf{Wartość} \\
+\midrule
+Łącznie ocenionych obrazów & 2487 \\
+Poprawne klasyfikacje & 1958 \\
+Ogólna dokładność & 78,73\% \\
+\bottomrule
+\end{tabular}
+\caption{Ogólne wyniki ewaluacji}
+\end{table}
+
+\subsection{Wydajność per klasa}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Klasa} & \textbf{Łącznie} & \textbf{Poprawne} & \textbf{Dokładność} & \textbf{Uwagi} \\
+\midrule
+LYMPHOCYTE & 620 & 617 & 99,5\% & Najlepsza klasa \\
+EOSINOPHIL & 623 & 398 & 63,9\% & Często mylony z innymi \\
+MONOCYTE & 620 & 457 & 73,7\% & Często klasyfikowany jako NEUTROPHIL \\
+NEUTROPHIL & 624 & 486 & 77,9\% & Często klasyfikowany jako EOSINOPHIL \\
+\bottomrule
+\end{tabular}
+\caption{Rozbicie dokładności per klasa}
+\end{table}
+
+\subsection{Analiza pomyłek}
+
+Kluczowe obserwacje z macierzy pomyłek:
+\begin{itemize}
+    \item \textbf{Limfocyty} są dobrze rozróżnialne dzięki charakterystycznie małemu rozmiarowi i dużemu ciemnemu jądru
+    \item \textbf{Eozynofile} są często błędnie klasyfikowane jako limfocyty lub neutrofile
+    \item \textbf{Monocyty} są często mylone z neutrofilami (podobna morfologia)
+    \item \textbf{Neutrofile} wykazują wysoką pomyłkowość z eozynofilami (oba mają płatkowate jądra)
+\end{itemize}
+
+\section{Dyskusja}
+
+\subsection{Czego się nauczyliśmy}
+
+\begin{enumerate}
+    \item \textbf{Detekcja oparta na kolorach jest skuteczna:} Maska z dominującym niebieskim niezawodnie wykrywa barwione jądra z minimalną liczbą fałszywych pozytywów.
+    
+    \item \textbf{Inżynieria cech:} 27-wymiarowy wektor cech przechwytuje kluczowe właściwości morfologiczne i kolorymetryczne, ale niektóre cechy (jak eosin\_fraction) mają wysoką wariancję.
+    
+    \item \textbf{Metody klasyczne mają ograniczenia:} Bez bardziej zaawansowanych technik rozróżnianie podobnych typów komórek (neutrofil vs eozinofil, monocyt vs neutrofil) pozostaje wyzwaniem.
+    
+    \item \textbf{Drzewa decyzyjne są interpretowalne:} Wizualizacja drzewa pokazuje dokładnie, które cechy napędzają decyzje klasyfikacyjne, pomagając w debugowaniu i zrozumieniu.
+    
+    \item \textbf{Rozmiar zbioru danych wpływa na generalizację:} Pełny zbiór danych z tysiącami próbek treningowych pozwala modelowi lepiej uchwycić zmienność wewnątrzklasową.
+\end{enumerate}
+
+\subsection{Ograniczenia}
+
+\begin{itemize}
+    \item \textbf{Dokładność:} 78,73\% jest satysfakcjonująca jak na ten projekt, ale wciąż mogłaby być lepsza
+    \item \textbf{Wrażliwość na niezbalansowanie klas:} Wydajność znacznie różni się między klasami
+    \item \textbf{Wrażliwość na barwienie:} Progi kolorów zakładają spójne protokoły barwienia
+    \item \textbf{Założenie pojedynczej komórki:} Detekcja może mieć problemy z nakładającymi się komórkami
+\end{itemize}
+
+\section{Podsumowanie}
+
+Niniejszy projekt demonstruje kompletny pipeline do klasyfikacji białych krwinek przy użyciu klasycznych technik widzenia komputerowego. Obecna dokładność (78,73\%) jest obiecująca, a system zapewnia:
+
+\begin{itemize}
+    \item Działający pipeline od początku do końca od surowych obrazów do adnotowanych wyników
+    \item Interpretowalną klasyfikację drzewem decyzyjnym
+    \item Wszechstronne narzędzia wizualizacji i ewaluacji
+    \item Podstawę do przyszłych ulepszeń
+\end{itemize}
+
+Klasa limfocytów osiąga 99,5\% dokładności, pokazując, że podejście działa bardzo dobrze dla wyróżniających się typów komórek. Poprawa wydajności na morfologicznie podobnych klasach (neutrofil/eozinofil/monocyt) wymagałaby albo bardziej wyrafinowanych cech, albo podejść głębokiego uczenia.
+
+Baza kodu jest modułowa, dobrze udokumentowana i gotowa do rozszerzenia. Cały kod źródłowy, wytrenowane modele i artefakty ewaluacji są odtwarzalne za pomocą dostarczonych celów Makefile.
+
+\appendix
+
+\section{Referencja cech}
+
+Pełna lista 27 cech ekstrahowanych na komórkę:
+
+\begin{enumerate}
+    \item \texttt{bbox\_width\_ratio} -- Szerokość ramki / szerokość obrazu
+    \item \texttt{bbox\_height\_ratio} -- Wysokość ramki / wysokość obrazu
+    \item \texttt{bbox\_aspect\_ratio} -- Szerokość / wysokość ramki
+    \item \texttt{bbox\_area\_ratio} -- Pole ramki / pole obrazu
+    \item \texttt{blue\_fraction} -- Frakcja pikseli z dominującym niebieskim
+    \item \texttt{nucleus\_fraction} -- Frakcja ciemnoniebieskich pikseli (jądro)
+    \item \texttt{eosin\_fraction} -- Frakcja różowo-pomarańczowych pikseli (ziarnistości eozyny)
+    \item \texttt{pale\_fraction} -- Frakcja bladoróżowych pikseli (cytoplazma)
+    \item \texttt{monocyte\_fraction} -- Frakcja szarawych pikseli
+    \item \texttt{cell\_fraction} -- Połączona frakcja maski komórki
+    \item \texttt{mean\_red} -- Średnia wartość kanału czerwonego
+    \item \texttt{mean\_green} -- Średnia wartość kanału zielonego
+    \item \texttt{mean\_blue} -- Średnia wartość kanału niebieskiego
+    \item \texttt{std\_red} -- Odchylenie standardowe kanału czerwonego
+    \item \texttt{std\_green} -- Odchylenie standardowe kanału zielonego
+    \item \texttt{std\_blue} -- Odchylenie standardowe kanału niebieskiego
+    \item \texttt{mean\_blue\_dom} -- Średnia dominacja niebieskiego
+    \item \texttt{mean\_saturation} -- Średnia saturacja koloru
+    \item \texttt{purple\_fraction} -- Frakcja fioletowych pikseli
+    \item \texttt{nucleus\_components} -- Spójne składowe w jądrze
+    \item \texttt{nucleus\_holes} -- Dziury w masce jądra
+    \item \texttt{pale\_components} -- Spójne składowe w masce bladej
+    \item \texttt{pale\_euler} -- Liczba Eulera maski bladej
+    \item \texttt{blue\_holes} -- Dziury w masce niebieskiej
+    \item \texttt{compactness} -- Zwartość kształtu (obwód$^2$/pole)
+    \item \texttt{moment\_ratio} -- Stosunek wartości własnych (wydłużenie)
+    \item \texttt{moment\_spread} -- Suma wartości własnych (rozproszenie)
+\end{enumerate}
+\end{document}

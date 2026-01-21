@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -285,6 +286,40 @@ def _annotate_image(
 
 
 def main() -> None:
+    # Show usage help
+    if len(sys.argv) == 2 and sys.argv[1] in ['-h', '--help']:
+        print("Usage:")
+        print("  python decision_tree_annotator.py                    # Process all TEST images")
+        print("  python decision_tree_annotator.py <input> <output>  # Process single image")
+        print("  python decision_tree_annotator.py --help             # Show this help")
+        return
+    
+    # Check if running in single file mode (input and output arguments)
+    if len(sys.argv) == 3:
+        input_path = Path(sys.argv[1])
+        output_path = Path(sys.argv[2])
+        
+        # Load training data and train model
+        feature_rows, labels = _load_training_data(Path("target/features.json"))
+        if not feature_rows:
+            raise ValueError("Feature manifest contains no rows")
+
+        tree = DecisionTreeClassifier()
+        tree.fit(feature_rows, labels)
+
+        # Process single image
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+        
+        out_path, counts = _annotate_image(tree, input_path, output_path)
+        if counts:
+            summary = ", ".join(f"{label}:{counts[label]}" for label in sorted(counts.keys()))
+        else:
+            summary = "No white cells detected"
+        print(f"Annotated {out_path} :: {summary}")
+        return
+
+    # Default mode: process all TEST images
     feature_rows, labels = _load_training_data(Path("target/features.json"))
     if not feature_rows:
         raise ValueError("Feature manifest contains no rows")

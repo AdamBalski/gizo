@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 .DS_STORE
 .idea
+docs/docs-pl.aux
+docs/docs-pl.log
+docs/docs-pl.out
+docs/docs-pl.pdf
+docs/docs-pl.toc
+docs/texput.log
