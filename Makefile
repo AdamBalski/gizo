@@ -27,19 +27,19 @@ check-venv:
 	fi
 
 # Ensure venv exists before running any Python commands
-$(BBOX_JSON): check-venv
+$(BBOX_JSON): | check-venv
 	$(VENV_PYTHON) bounding_boxes_creation.py
 
-$(FEATURES_JSON): check-venv $(BBOX_JSON)
+$(FEATURES_JSON): $(BBOX_JSON) | check-venv
 	$(VENV_PYTHON) feature_extraction.py
 
-$(EVAL_JSON): check-venv $(FEATURES_JSON)
+$(EVAL_JSON): $(FEATURES_JSON) | check-venv
 	$(VENV_PYTHON) evaluator.py
 
-$(SUMMARY_PNG): check-venv $(EVAL_JSON)
+$(SUMMARY_PNG): $(EVAL_JSON) | check-venv
 	$(VENV_PYTHON) plotter.py
 
-$(TREE_PNG): check-venv $(FEATURES_JSON)
+$(TREE_PNG): $(FEATURES_JSON) | check-venv
 	$(VENV_PYTHON) tree_plotter.py
 
 venv: check-venv
